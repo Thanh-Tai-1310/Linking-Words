@@ -4,32 +4,28 @@ import json
 import logging
 from datetime import datetime
 
-# Cấu hình logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class WordChainServer:
     def __init__(self):
         self.clients = {}  # {websocket: {'username': str, 'score': int}}
-        self.player_list = []  # Ordered list of usernames
+        self.player_list = []
         self.used_words = []
         self.current_turn = 0
         self.game_started = False
         
         # Từ điển mẫu
         self.valid_words = {
-            'bàn', 'nước', 'cây', 'yêu', 'uống', 'gà', 'ăn', 'ngọt', 'tốt', 'táo',
-            'ong', 'gấu', 'ủng', 'ghế', 'ếch', 'chó', 'ót', 'tím', 'mèo', 'ở',
             'apple', 'elephant', 'tiger', 'rabbit', 'tree', 'earth', 'house', 'egg',
             'game', 'moon', 'nice', 'easy', 'yellow', 'water', 'rice', 'eat',
-            'ant', 'table', 'test', 'sun', 'new', 'wood', 'door', 'end',
-            'red', 'dog', 'green', 'nine', 'day', 'year', 'run', 'night'
+            'ant', 'table', 'test', 'sun', 'new', 'wood', 'door', 'red', 'dog',
+            'green', 'nine', 'day', 'year', 'run', 'night', 'tea', 'air', 'rat'
         }
 
     async def register_client(self, websocket, path):
-        """Xử lý kết nối WebSocket mới"""
-        client_addr = websocket.remote_address
-        logger.info(f"📱 Kết nối mới từ {client_addr}")
+        client_addr = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+        logger.info(f"New connection from {client_addr}")
         
         try:
             async for message in websocket:
@@ -37,19 +33,18 @@ class WordChainServer:
                     data = json.loads(message)
                     await self.process_message(websocket, data)
                 except json.JSONDecodeError:
-                    await self.send_error(websocket, "Định dạng tin nhắn không hợp lệ")
+                    await self.send_error(websocket, "Invalid message format")
                 except Exception as e:
-                    logger.error(f"Lỗi xử lý tin nhắn: {e}")
-                    await self.send_error(websocket, "Lỗi server")
+                    logger.error(f"Error processing message: {e}")
+                    await self.send_error(websocket, "Server error")
         except websockets.exceptions.ConnectionClosed:
-            logger.info(f"📱 Client {client_addr} đã ngắt kết nối")
+            logger.info(f"Client {client_addr} disconnected")
         except Exception as e:
-            logger.error(f"❌ Lỗi kết nối {client_addr}: {e}")
+            logger.error(f"Connection error {client_addr}: {e}")
         finally:
             await self.remove_client(websocket)
 
     async def process_message(self, websocket, message):
-        """Xử lý tin nhắn từ client"""
         msg_type = message.get('type')
         
         if msg_type == 'JOIN':
@@ -59,39 +54,38 @@ class WordChainServer:
         elif msg_type == 'PING':
             await self.send_message(websocket, {'type': 'PONG'})
         else:
-            await self.send_error(websocket, f"Loại tin nhắn không hợp lệ: {msg_type}")
+            await self.send_error(websocket, f"Unknown message type: {msg_type}")
 
     async def handle_join(self, websocket, message):
-        """Xử lý yêu cầu tham gia game"""
         username = message.get('username', '').strip()
         
         # Validation
         if not username:
-            await self.send_error(websocket, "Tên người chơi không được để trống")
+            await self.send_error(websocket, "Username cannot be empty")
             return
         
         if len(username) > 20:
-            await self.send_error(websocket, "Tên người chơi quá dài (tối đa 20 ký tự)")
+            await self.send_error(websocket, "Username too long (max 20 characters)")
             return
             
         if username in [client['username'] for client in self.clients.values()]:
-            await self.send_error(websocket, "Tên người chơi đã tồn tại")
+            await self.send_error(websocket, "Username already exists")
             return
         
         if len(self.clients) >= 5:
-            await self.send_error(websocket, "Phòng đã đầy (tối đa 5 người chơi)")
+            await self.send_error(websocket, "Room is full (max 5 players)")
             return
 
-        # Thêm client
+        # Add client
         self.clients[websocket] = {
             'username': username,
             'score': 0
         }
         self.player_list.append(username)
         
-        logger.info(f"✅ {username} đã tham gia game")
+        logger.info(f"Player {username} joined the game")
         
-        # Gửi thông báo tham gia thành công
+        # Send join success
         await self.send_message(websocket, {
             'type': 'JOIN_SUCCESS',
             'username': username,
@@ -101,74 +95,72 @@ class WordChainServer:
             'game_started': self.game_started
         })
         
-        # Broadcast cho tất cả client
+        # Broadcast game state
         await self.broadcast_game_state()
         
-        # Bắt đầu game nếu đủ người chơi
+        # Start game if enough players
         if len(self.clients) >= 2 and not self.game_started:
             await self.start_game()
 
     async def handle_word(self, websocket, message):
-        """Xử lý từ được gửi"""
         if not self.game_started:
-            await self.send_error(websocket, "Game chưa bắt đầu")
+            await self.send_error(websocket, "Game not started yet")
             return
             
         word = message.get('word', '').strip().lower()
         username = self.clients[websocket]['username']
         
-        # Kiểm tra lượt chơi
+        # Check turn
         if self.player_list[self.current_turn] != username:
-            await self.send_error(websocket, "Chưa đến lượt của bạn")
+            await self.send_error(websocket, "Not your turn")
             return
         
-        # Validate từ
+        # Validate word
         validation = self.validate_word(word)
         if not validation['valid']:
             await self.send_error(websocket, validation['reason'])
             return
         
-        # Thêm từ vào danh sách
+        # Add word
         self.used_words.append({
             'word': word,
             'player': username,
             'timestamp': datetime.now().isoformat()
         })
         
-        # Tăng điểm
+        # Add score
         self.clients[websocket]['score'] += len(word)
         
-        logger.info(f"✅ {username}: {word}")
+        logger.info(f"Player {username} submitted word: {word}")
         
-        # Chuyển lượt
+        # Next turn
         self.next_turn()
         
-        # Gửi phản hồi thành công
+        # Send success response
         await self.send_message(websocket, {
             'type': 'WORD_ACCEPTED',
             'word': word,
             'score': len(word)
         })
         
-        # Broadcast trạng thái mới
+        # Broadcast new state
         await self.broadcast_game_state()
 
     def validate_word(self, word):
-        """Kiểm tra tính hợp lệ của từ"""
         if not word:
-            return {'valid': False, 'reason': 'Từ không được để trống'}
+            return {'valid': False, 'reason': 'Word cannot be empty'}
         
         if len(word) < 2:
-            return {'valid': False, 'reason': 'Từ phải có ít nhất 2 ký tự'}
+            return {'valid': False, 'reason': 'Word must have at least 2 characters'}
             
         if word not in self.valid_words:
-            return {'valid': False, 'reason': 'Từ không có trong từ điển'}
+            return {'valid': False, 'reason': 'Word not in dictionary'}
         
-        # Kiểm tra trùng lặp
+        # Check duplicates
         if any(w['word'] == word for w in self.used_words):
-            return {'valid': False, 'reason': 'Từ đã được sử dụng'}
+            return {'valid': False, 'reason': 'Word already used'}
         
-        # Kiểm tra quy tắc nối từ
+        # Check chain rule
         if self.used_words:
             last_word = self.used_words[-1]['word']
             last_char = last_word[-1].lower()
@@ -177,24 +169,21 @@ class WordChainServer:
             if last_char != first_char:
                 return {
                     'valid': False, 
-                    'reason': f'Từ phải bắt đầu bằng chữ "{last_char.upper()}"'
+                    'reason': f'Word must start with "{last_char.upper()}"'
                 }
         
         return {'valid': True}
 
     async def start_game(self):
-        """Bắt đầu game"""
         self.game_started = True
         self.current_turn = 0
-        logger.info(f"🎮 Game bắt đầu với {len(self.clients)} người chơi!")
+        logger.info(f"Game started with {len(self.clients)} players!")
         await self.broadcast_game_state()
 
     def next_turn(self):
-        """Chuyển sang lượt tiếp theo"""
         self.current_turn = (self.current_turn + 1) % len(self.player_list)
 
     async def broadcast_game_state(self):
-        """Broadcast trạng thái game cho tất cả client"""
         game_state = {
             'type': 'GAME_STATE',
             'players': [
@@ -215,7 +204,6 @@ class WordChainServer:
         await self.broadcast(game_state)
 
     async def broadcast(self, message):
-        """Gửi tin nhắn đến tất cả client"""
         if not self.clients:
             return
             
@@ -227,39 +215,36 @@ class WordChainServer:
             except websockets.exceptions.ConnectionClosed:
                 disconnected_clients.append(websocket)
             except Exception as e:
-                logger.error(f"Lỗi broadcast đến client: {e}")
+                logger.error(f"Error broadcasting to client: {e}")
                 disconnected_clients.append(websocket)
         
-        # Xóa client đã ngắt kết nối
+        # Remove disconnected clients
         for websocket in disconnected_clients:
             await self.remove_client(websocket)
 
     async def send_message(self, websocket, message):
-        """Gửi tin nhắn đến một client"""
         try:
             data = json.dumps(message, ensure_ascii=False)
             await websocket.send(data)
         except Exception as e:
-            logger.error(f"❌ Lỗi gửi tin nhắn: {e}")
+            logger.error(f"Error sending message: {e}")
             raise
 
     async def send_error(self, websocket, error_message):
-        """Gửi tin nhắn lỗi đến client"""
         await self.send_message(websocket, {
             'type': 'ERROR',
             'message': error_message
         })
 
     async def remove_client(self, websocket):
-        """Xóa client khỏi game"""
         if websocket in self.clients:
             username = self.clients[websocket]['username']
-            logger.info(f"👋 {username} đã rời khỏi game")
+            logger.info(f"Player {username} left the game")
             
-            # Xóa khỏi danh sách
+            # Remove from lists
             del self.clients[websocket]
             if username in self.player_list:
-                # Điều chỉnh current_turn nếu cần
+                # Adjust current_turn if needed
                 removed_index = self.player_list.index(username)
                 if removed_index < self.current_turn:
                     self.current_turn -= 1
@@ -269,38 +254,33 @@ class WordChainServer:
                 
                 self.player_list.remove(username)
             
-            # Reset game nếu không đủ người chơi
+            # Reset game if not enough players
             if len(self.clients) < 2:
                 self.game_started = False
                 self.current_turn = 0
-                logger.info("⏸️ Game tạm dừng - không đủ người chơi")
+                logger.info("Game paused - not enough players")
             
-            # Broadcast trạng thái mới
+            # Broadcast new state
             if self.clients:
                 await self.broadcast_game_state()
 
 async def main():
-    # Tạo server instance
     server = WordChainServer()
-    
-    # Khởi động WebSocket server
     host = "localhost"
     port = 8765
     
-    logger.info(f"🚀 Đang khởi động WebSocket server tại {host}:{port}")
+    logger.info(f"Starting WebSocket server at {host}:{port}")
     
     try:
         async with websockets.serve(server.register_client, host, port):
-            logger.info(f"✅ Server đã khởi động tại ws://{host}:{port}")
-            logger.info("Đang chờ người chơi kết nối...")
-            
-            # Chạy server vĩnh viễn
+            logger.info(f"Server running at ws://{host}:{port}")
+            logger.info("Waiting for connections...")
             await asyncio.Future()  # Run forever
             
     except KeyboardInterrupt:
-        logger.info("🔴 Nhận tín hiệu dừng server...")
+        logger.info("Server stopped by user")
     except Exception as e:
-        logger.error(f"❌ Lỗi server: {e}")
+        logger.error(f"Server error: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
