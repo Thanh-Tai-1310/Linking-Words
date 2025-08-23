@@ -44,8 +44,8 @@ class WordChainClient {
 
     connect(host, port, username) {
         try {
-            // Tạo WebSocket connection
-            const ws = new WebSocket('ws://localhost:8765');
+            // Tạo WebSocket connection - FIX: Sử dụng port đúng từ server (8765)
+            const wsUrl = `ws://${host}:8765`;  // Server chạy ở port 8765, không phải port từ input
             this.ws = new WebSocket(wsUrl);
             
             this.updateConnectionStatus('Đang kết nối...', 'waiting');
@@ -468,4 +468,39 @@ const gameClient = new WordChainClient();
 // Global functions for HTML onclick events
 function connectToServer() {
     const host = document.getElementById('server-host').value.trim() || 'localhost';
-    const port
+    const port = parseInt(document.getElementById('server-port').value) || 8765;
+    const username = document.getElementById('username').value.trim();
+    
+    if (!username) {
+        gameClient.showError('Vui lòng nhập tên người chơi!');
+        return;
+    }
+    
+    if (username.length > 20) {
+        gameClient.showError('Tên người chơi quá dài (tối đa 20 ký tự)!');
+        return;
+    }
+    
+    gameClient.connect(host, port, username);
+}
+
+function submitWord() {
+    gameClient.submitWord();
+}
+
+function disconnect() {
+    gameClient.disconnect();
+}
+
+function clearLog() {
+    gameClient.clearLog();
+}
+
+function hideToast() {
+    gameClient.hideToast();
+}
+
+// Start heartbeat when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    gameClient.startHeartbeat();
+});
