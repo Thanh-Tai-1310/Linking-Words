@@ -1,86 +1,75 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Nối Từ - Client</title>
+    <title>Word Chain Game</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>🎮 Game Nối Từ</h1>
+        <h1>Word Chain Game</h1>
         
         <!-- Connection Section -->
         <div id="connection-section" class="section">
             <div class="card">
-                <h2>🔗 Kết nối Server</h2>
+                <h2>Connect to Server</h2>
                 <div class="input-group">
-                    <label for="server-host">Server:</label>
-                    <input type="text" id="server-host" value="localhost" placeholder="localhost">
+                    <label for="username">Player Name:</label>
+                    <input type="text" id="username" placeholder="Enter your name..." maxlength="20">
                 </div>
-                <div class="input-group">
-                    <label for="server-port">Port:</label>
-                    <input type="number" id="server-port" value="8888" placeholder="8888">
-                </div>
-                <div class="input-group">
-                    <label for="username">Tên người chơi:</label>
-                    <input type="text" id="username" placeholder="Nhập tên của bạn..." maxlength="20">
-                </div>
-                <button class="btn primary" onclick="connectToServer()">Kết nối & Tham gia</button>
+                <button class="btn" onclick="connectToServer()">Connect & Join</button>
             </div>
         </div>
 
         <!-- Game Section -->
         <div id="game-section" class="section hidden">
             <div class="status-bar">
-                <div class="status" id="connection-status">🔗 Đang kết nối...</div>
+                <div class="status" id="connection-status">Connecting...</div>
                 <div class="game-info">
-                    <span id="total-words">0</span> từ • 
-                    <span id="total-players">0</span> người chơi
+                    <span id="total-words">0</span> words • 
+                    <span id="total-players">0</span> players
                 </div>
             </div>
 
             <!-- Players -->
             <div class="card">
-                <h3>👥 Người chơi</h3>
+                <h3>Players</h3>
                 <div id="players-container" class="players-grid">
-                    <div class="no-players">Chưa có người chơi nào...</div>
+                    <div class="no-players">No players yet...</div>
                 </div>
             </div>
 
             <!-- Word Chain -->
             <div class="card">
-                <h3>🔗 Chuỗi từ</h3>
+                <h3>Word Chain</h3>
                 <div id="word-chain" class="word-chain">
-                    <div class="no-words">Chưa có từ nào...</div>
+                    <div class="no-words">No words yet...</div>
                 </div>
             </div>
 
             <!-- Word Input -->
             <div class="card">
-                <h3 id="input-title">💭 Nhập từ</h3>
+                <h3 id="input-title">Enter Word</h3>
                 <div class="word-input-section">
-                    <input type="text" id="word-input" placeholder="Nhập từ của bạn..." maxlength="50" disabled>
-                    <button class="btn primary" id="submit-word-btn" onclick="submitWord()" disabled>
-                        <span id="btn-text">Gửi từ</span>
-                        <span id="btn-loading" class="hidden">⏳</span>
-                    </button>
+                    <input type="text" id="word-input" placeholder="Enter your word..." maxlength="50" disabled>
+                    <button class="btn" id="submit-word-btn" onclick="submitWord()" disabled>Submit</button>
                 </div>
                 <div id="word-hint" class="hint hidden">
-                    Từ tiếp theo phải bắt đầu bằng chữ: <span id="required-char"></span>
+                    Next word must start with: <strong id="required-char"></strong>
                 </div>
             </div>
 
             <!-- Game Log -->
             <div class="card">
-                <h3>📝 Nhật ký game</h3>
+                <h3>Game Log</h3>
                 <div id="game-log" class="game-log"></div>
             </div>
 
             <!-- Controls -->
             <div class="controls">
-                <button class="btn secondary" onclick="disconnect()">Ngắt kết nối</button>
-                <button class="btn secondary" onclick="clearLog()">Xóa log</button>
+                <button class="btn secondary" onclick="disconnect()">Disconnect</button>
+                <button class="btn secondary" onclick="clearLog()">Clear Log</button>
             </div>
         </div>
     </div>
@@ -91,6 +80,425 @@
         <button onclick="hideToast()">&times;</button>
     </div>
 
-    <script src="script.js"></script>
+    <script>
+        class WordChainClient {
+            constructor() {
+                this.ws = null;
+                this.connected = false;
+                this.username = '';
+                this.gameState = {
+                    players: [],
+                    usedWords: [],
+                    currentTurn: 0,
+                    currentPlayer: null,
+                    gameStarted: false,
+                    totalWords: 0
+                };
+                
+                this.initializeEventListeners();
+            }
+
+            initializeEventListeners() {
+                document.getElementById('username').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') connectToServer();
+                });
+
+                document.getElementById('word-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.target.disabled) {
+                        submitWord();
+                    }
+                });
+            }
+
+            connect(username) {
+                try {
+                    const wsUrl = 'ws://localhost:8765';
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    this.updateConnectionStatus('Connecting...', 'waiting');
+                    this.addLogEntry(`Connecting to ${wsUrl}...`, 'info');
+                    
+                    this.ws.onopen = () => {
+                        this.connected = true;
+                        this.username = username;
+                        this.updateConnectionStatus('Connected', 'connected');
+                        this.addLogEntry('WebSocket connection successful!', 'success');
+                        
+                        this.sendMessage({
+                            type: 'JOIN',
+                            username: username
+                        });
+                        
+                        this.showGameSection();
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const message = JSON.parse(event.data);
+                            this.handleMessage(message);
+                        } catch (error) {
+                            console.error('Error parsing message:', error);
+                            this.addLogEntry('Error parsing message from server', 'error');
+                        }
+                    };
+                    
+                    this.ws.onclose = (event) => {
+                        this.connected = false;
+                        this.updateConnectionStatus('Disconnected', 'disconnected');
+                        
+                        if (event.wasClean) {
+                            this.addLogEntry('Disconnected from server', 'system');
+                        } else {
+                            this.addLogEntry('Lost connection to server', 'error');
+                        }
+                        
+                        this.disableWordInput();
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.addLogEntry('WebSocket connection error', 'error');
+                        this.updateConnectionStatus('Connection Error', 'disconnected');
+                    };
+                    
+                } catch (error) {
+                    this.showError('Cannot connect to server: ' + error.message);
+                    console.error('Connection error:', error);
+                }
+            }
+
+            handleMessage(message) {
+                const type = message.type;
+                
+                switch (type) {
+                    case 'JOIN_SUCCESS':
+                        this.handleJoinSuccess(message);
+                        break;
+                        
+                    case 'GAME_STATE':
+                        this.handleGameState(message);
+                        break;
+                        
+                    case 'WORD_ACCEPTED':
+                        this.handleWordAccepted(message);
+                        break;
+                        
+                    case 'ERROR':
+                        this.handleError(message);
+                        break;
+                        
+                    case 'PONG':
+                        break;
+                        
+                    default:
+                        console.log('Unknown message type:', type, message);
+                }
+            }
+
+            handleJoinSuccess(message) {
+                this.addLogEntry(`Successfully joined game as ${message.username}!`, 'success');
+                
+                this.gameState.players = message.players.map(username => ({
+                    username: username,
+                    score: 0
+                }));
+                this.gameState.usedWords = message.used_words || [];
+                this.gameState.currentTurn = message.current_turn || 0;
+                this.gameState.gameStarted = message.game_started || false;
+                
+                this.updateUI();
+                
+                if (this.gameState.gameStarted) {
+                    const currentPlayer = this.gameState.players[this.gameState.currentTurn];
+                    if (currentPlayer && currentPlayer.username === this.username) {
+                        this.enableWordInput();
+                        this.addLogEntry('Your turn!', 'info');
+                    } else {
+                        this.addLogEntry('Waiting for turn...', 'info');
+                    }
+                } else {
+                    this.addLogEntry('Waiting for game to start...', 'info');
+                }
+            }
+
+            handleGameState(message) {
+                this.gameState.players = message.players || [];
+                this.gameState.usedWords = message.used_words || [];
+                this.gameState.currentTurn = message.current_turn || 0;
+                this.gameState.currentPlayer = message.current_player;
+                this.gameState.gameStarted = message.game_started || false;
+                this.gameState.totalWords = message.total_words || 0;
+                
+                this.updateUI();
+                
+                if (this.gameState.gameStarted) {
+                    if (this.gameState.currentPlayer === this.username) {
+                        this.enableWordInput();
+                        this.addLogEntry('Your turn!', 'info');
+                    } else {
+                        this.disableWordInput();
+                        this.addLogEntry(`${this.gameState.currentPlayer}'s turn...`, 'info');
+                    }
+                }
+            }
+
+            handleWordAccepted(message) {
+                this.addLogEntry(`Word "${message.word}" accepted! (+${message.score} points)`, 'success');
+                document.getElementById('word-input').value = '';
+            }
+
+            handleError(message) {
+                this.showError(message.message);
+                this.addLogEntry(`Error: ${message.message}`, 'error');
+            }
+
+            sendMessage(message) {
+                if (!this.connected || !this.ws) {
+                    this.showError('Not connected to server');
+                    return false;
+                }
+                
+                try {
+                    this.ws.send(JSON.stringify(message));
+                    return true;
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    this.showError('Error sending message');
+                    return false;
+                }
+            }
+
+            submitWord(word) {
+                if (!word) {
+                    word = document.getElementById('word-input').value.trim();
+                }
+                
+                if (!word) {
+                    this.showError('Please enter a word!');
+                    return;
+                }
+
+                if (!this.gameState.gameStarted) {
+                    this.showError('Game not started yet!');
+                    return;
+                }
+
+                if (this.gameState.currentPlayer !== this.username) {
+                    this.showError('Not your turn!');
+                    return;
+                }
+
+                const btn = document.getElementById('submit-word-btn');
+                btn.disabled = true;
+                btn.textContent = 'Sending...';
+
+                this.sendMessage({
+                    type: 'WORD',
+                    word: word
+                });
+
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = 'Submit';
+                }, 1000);
+            }
+
+            enableWordInput() {
+                const input = document.getElementById('word-input');
+                const btn = document.getElementById('submit-word-btn');
+                const title = document.getElementById('input-title');
+                
+                input.disabled = false;
+                btn.disabled = false;
+                title.textContent = 'Your Turn - Enter Word';
+                
+                input.focus();
+                
+                if (this.gameState.usedWords.length > 0) {
+                    const lastWord = this.gameState.usedWords[this.gameState.usedWords.length - 1].word;
+                    const lastChar = lastWord.charAt(lastWord.length - 1).toUpperCase();
+                    
+                    document.getElementById('required-char').textContent = lastChar;
+                    document.getElementById('word-hint').classList.remove('hidden');
+                }
+            }
+
+            disableWordInput() {
+                const input = document.getElementById('word-input');
+                const btn = document.getElementById('submit-word-btn');
+                const title = document.getElementById('input-title');
+                
+                input.disabled = true;
+                btn.disabled = true;
+                input.value = '';
+                title.textContent = 'Waiting for your turn';
+                
+                document.getElementById('word-hint').classList.add('hidden');
+            }
+
+            updateUI() {
+                this.updatePlayersDisplay();
+                this.updateWordChain();
+                this.updateGameStats();
+            }
+
+            updatePlayersDisplay() {
+                const container = document.getElementById('players-container');
+                
+                if (this.gameState.players.length === 0) {
+                    container.innerHTML = '<div class="no-players">No players yet...</div>';
+                    return;
+                }
+
+                container.innerHTML = this.gameState.players.map((player, index) => {
+                    const isCurrentTurn = index === this.gameState.currentTurn && this.gameState.gameStarted;
+                    const isMe = player.username === this.username;
+                    
+                    let classes = 'player-card';
+                    if (isCurrentTurn) classes += ' current-turn';
+                    if (isMe) classes += ' me';
+
+                    return `
+                        <div class="${classes}">
+                            <div class="player-name">
+                                ${player.username}${isMe ? ' (You)' : ''}
+                            </div>
+                            <div class="player-score">${player.score} points</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            updateWordChain() {
+                const container = document.getElementById('word-chain');
+                
+                if (this.gameState.usedWords.length === 0) {
+                    container.innerHTML = '<div class="no-words">No words yet...</div>';
+                    return;
+                }
+
+                container.innerHTML = this.gameState.usedWords.map((wordData, index) => `
+                    <div class="word-item" title="By ${wordData.player}">
+                        ${wordData.word}
+                    </div>
+                `).join('');
+                
+                container.scrollLeft = container.scrollWidth;
+            }
+
+            updateGameStats() {
+                document.getElementById('total-words').textContent = this.gameState.usedWords.length;
+                document.getElementById('total-players').textContent = this.gameState.players.length;
+            }
+
+            updateConnectionStatus(message, type) {
+                const statusEl = document.getElementById('connection-status');
+                statusEl.textContent = message;
+                statusEl.className = `status ${type}`;
+            }
+
+            showGameSection() {
+                document.getElementById('connection-section').classList.add('hidden');
+                document.getElementById('game-section').classList.remove('hidden');
+            }
+
+            addLogEntry(message, type = 'info') {
+                const log = document.getElementById('game-log');
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${type}`;
+                
+                const timestamp = new Date().toLocaleTimeString();
+                entry.textContent = `[${timestamp}] ${message}`;
+                
+                log.appendChild(entry);
+                log.scrollTop = log.scrollHeight;
+                
+                while (log.children.length > 50) {
+                    log.removeChild(log.firstChild);
+                }
+            }
+
+            showError(message) {
+                this.showToast(message, 'error');
+            }
+
+            showToast(message, type = 'info') {
+                const toast = document.getElementById('toast');
+                const messageEl = document.getElementById('toast-message');
+                
+                messageEl.textContent = message;
+                toast.className = `toast ${type}`;
+                toast.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    this.hideToast();
+                }, 3000);
+            }
+
+            hideToast() {
+                document.getElementById('toast').classList.add('hidden');
+            }
+
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                }
+                
+                this.connected = false;
+                
+                document.getElementById('connection-section').classList.remove('hidden');
+                document.getElementById('game-section').classList.add('hidden');
+                
+                this.gameState = {
+                    players: [],
+                    usedWords: [],
+                    currentTurn: 0,
+                    currentPlayer: null,
+                    gameStarted: false,
+                    totalWords: 0
+                };
+            }
+
+            clearLog() {
+                document.getElementById('game-log').innerHTML = '';
+            }
+        }
+
+        // Global client instance
+        const gameClient = new WordChainClient();
+
+        // Global functions
+        function connectToServer() {
+            const username = document.getElementById('username').value.trim();
+            
+            if (!username) {
+                gameClient.showError('Please enter a player name!');
+                return;
+            }
+            
+            if (username.length > 20) {
+                gameClient.showError('Player name too long (max 20 characters)!');
+                return;
+            }
+            
+            gameClient.connect(username);
+        }
+
+        function submitWord() {
+            gameClient.submitWord();
+        }
+
+        function disconnect() {
+            gameClient.disconnect();
+        }
+
+        function clearLog() {
+            gameClient.clearLog();
+        }
+
+        function hideToast() {
+            gameClient.hideToast();
+        }
+    </script>
 </body>
 </html>
