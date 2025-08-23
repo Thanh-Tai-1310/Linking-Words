@@ -23,7 +23,7 @@ class WordChainServer:
             'green', 'nine', 'day', 'year', 'run', 'night', 'tea', 'air', 'rat'
         }
 
-    async def register_client(self, websocket, path):
+    async def register_client(self, websocket):
         client_addr = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
         logger.info(f"New connection from {client_addr}")
         
