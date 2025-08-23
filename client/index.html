@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Nối Từ - Client</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Game Nối Từ</h1>
+        
+        <!-- Connection Section -->
+        <div id="connection-section" class="section">
+            <div class="card">
+                <h2>🔗 Kết nối Server</h2>
+                <div class="input-group">
+                    <label for="server-host">Server:</label>
+                    <input type="text" id="server-host" value="localhost" placeholder="localhost">
+                </div>
+                <div class="input-group">
+                    <label for="server-port">Port:</label>
+                    <input type="number" id="server-port" value="8888" placeholder="8888">
+                </div>
+                <div class="input-group">
+                    <label for="username">Tên người chơi:</label>
+                    <input type="text" id="username" placeholder="Nhập tên của bạn..." maxlength="20">
+                </div>
+                <button class="btn primary" onclick="connectToServer()">Kết nối & Tham gia</button>
+            </div>
+        </div>
+
+        <!-- Game Section -->
+        <div id="game-section" class="section hidden">
+            <div class="status-bar">
+                <div class="status" id="connection-status">🔗 Đang kết nối...</div>
+                <div class="game-info">
+                    <span id="total-words">0</span> từ • 
+                    <span id="total-players">0</span> người chơi
+                </div>
+            </div>
+
+            <!-- Players -->
+            <div class="card">
+                <h3>👥 Người chơi</h3>
+                <div id="players-container" class="players-grid">
+                    <div class="no-players">Chưa có người chơi nào...</div>
+                </div>
+            </div>
+
+            <!-- Word Chain -->
+            <div class="card">
+                <h3>🔗 Chuỗi từ</h3>
+                <div id="word-chain" class="word-chain">
+                    <div class="no-words">Chưa có từ nào...</div>
+                </div>
+            </div>
+
+            <!-- Word Input -->
+            <div class="card">
+                <h3 id="input-title">💭 Nhập từ</h3>
+                <div class="word-input-section">
+                    <input type="text" id="word-input" placeholder="Nhập từ của bạn..." maxlength="50" disabled>
+                    <button class="btn primary" id="submit-word-btn" onclick="submitWord()" disabled>
+                        <span id="btn-text">Gửi từ</span>
+                        <span id="btn-loading" class="hidden">⏳</span>
+                    </button>
+                </div>
+                <div id="word-hint" class="hint hidden">
+                    Từ tiếp theo phải bắt đầu bằng chữ: <span id="required-char"></span>
+                </div>
+            </div>
+
+            <!-- Game Log -->
+            <div class="card">
+                <h3>📝 Nhật ký game</h3>
+                <div id="game-log" class="game-log"></div>
+            </div>
+
+            <!-- Controls -->
+            <div class="controls">
+                <button class="btn secondary" onclick="disconnect()">Ngắt kết nối</button>
+                <button class="btn secondary" onclick="clearLog()">Xóa log</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast hidden">
+        <span id="toast-message"></span>
+        <button onclick="hideToast()">&times;</button>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
