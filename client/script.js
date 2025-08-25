@@ -1,4 +1,3 @@
-// Game Client Class với WebSocket
 class WordChainClient {
     constructor() {
         this.ws = null;
@@ -17,7 +16,6 @@ class WordChainClient {
     }
 
     initializeEventListeners() {
-        // Enter key support
         document.getElementById('username').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') connectToServer();
         });
@@ -35,8 +33,6 @@ class WordChainClient {
                 submitWord();
             }
         });
-
-        // Real-time word validation
         document.getElementById('word-input').addEventListener('input', (e) => {
             this.validateWordInput(e.target.value);
         });
@@ -44,21 +40,16 @@ class WordChainClient {
 
     connect(host, port, username) {
         try {
-            // Tạo WebSocket connection - FIX: Sử dụng port đúng từ server (8765)
-            const wsUrl = `ws://${host}:8765`;  // Server chạy ở port 8765, không phải port từ input
+            const wsUrl = `ws://${host}:8765`;
             this.ws = new WebSocket(wsUrl);
             
             this.updateConnectionStatus('Đang kết nối...', 'waiting');
             this.addLogEntry(`Đang kết nối đến ${wsUrl}...`, 'info');
-            
-            // WebSocket event handlers
             this.ws.onopen = () => {
                 this.connected = true;
                 this.username = username;
                 this.updateConnectionStatus('Đã kết nối', 'connected');
-                this.addLogEntry('✅ Kết nối WebSocket thành công!', 'success');
-                
-                // Gửi yêu cầu tham gia game
+                this.addLogEntry(' Kết nối WebSocket thành công!', 'success');
                 this.sendMessage({
                     type: 'JOIN',
                     username: username
@@ -73,7 +64,7 @@ class WordChainClient {
                     this.handleMessage(message);
                 } catch (error) {
                     console.error('Error parsing message:', error);
-                    this.addLogEntry('❌ Lỗi phân tích tin nhắn từ server', 'error');
+                    this.addLogEntry(' Lỗi phân tích tin nhắn từ server', 'error');
                 }
             };
             
@@ -82,9 +73,9 @@ class WordChainClient {
                 this.updateConnectionStatus('Đã ngắt kết nối', 'disconnected');
                 
                 if (event.wasClean) {
-                    this.addLogEntry('👋 Đã ngắt kết nối khỏi server', 'system');
+                    this.addLogEntry(' Đã ngắt kết nối khỏi server', 'system');
                 } else {
-                    this.addLogEntry('❌ Mất kết nối đến server', 'error');
+                    this.addLogEntry(' Mất kết nối đến server', 'error');
                 }
                 
                 this.disableWordInput();
@@ -92,7 +83,7 @@ class WordChainClient {
             
             this.ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                this.addLogEntry('❌ Lỗi kết nối WebSocket', 'error');
+                this.addLogEntry(' Lỗi kết nối WebSocket', 'error');
                 this.updateConnectionStatus('Lỗi kết nối', 'disconnected');
             };
             
@@ -132,7 +123,7 @@ class WordChainClient {
     }
 
     handleJoinSuccess(message) {
-        this.addLogEntry(`✅ Đã tham gia game với tên ${message.username}!`, 'success');
+        this.addLogEntry(` Đã tham gia game với tên ${message.username}!`, 'success');
         
         // Update initial game state
         this.gameState.players = message.players.map(username => ({
@@ -149,12 +140,12 @@ class WordChainClient {
             const currentPlayer = this.gameState.players[this.gameState.currentTurn];
             if (currentPlayer && currentPlayer.username === this.username) {
                 this.enableWordInput();
-                this.addLogEntry('🎯 Đến lượt bạn!', 'info');
+                this.addLogEntry(' Đến lượt bạn!', 'info');
             } else {
-                this.addLogEntry('⏳ Đang chờ lượt...', 'info');
+                this.addLogEntry(' Đang chờ lượt...', 'info');
             }
         } else {
-            this.addLogEntry('⏳ Đang chờ game bắt đầu...', 'info');
+            this.addLogEntry(' Đang chờ game bắt đầu...', 'info');
         }
     }
 
@@ -168,27 +159,25 @@ class WordChainClient {
         this.gameState.totalWords = message.total_words || 0;
         
         this.updateUI();
-        
-        // Check if it's my turn
         if (this.gameState.gameStarted) {
             if (this.gameState.currentPlayer === this.username) {
                 this.enableWordInput();
-                this.addLogEntry('🎯 Đến lượt bạn!', 'info');
+                this.addLogEntry(' Đến lượt bạn!', 'info');
             } else {
                 this.disableWordInput();
-                this.addLogEntry(`⏳ Đến lượt ${this.gameState.currentPlayer}...`, 'info');
+                this.addLogEntry(` Đến lượt ${this.gameState.currentPlayer}...`, 'info');
             }
         }
     }
 
     handleWordAccepted(message) {
-        this.addLogEntry(`✅ Từ "${message.word}" được chấp nhận! (+${message.score} điểm)`, 'success');
+        this.addLogEntry(` Từ "${message.word}" được chấp nhận! (+${message.score} điểm)`, 'success');
         document.getElementById('word-input').value = '';
     }
 
     handleError(message) {
         this.showError(message.message);
-        this.addLogEntry(`❌ ${message.message}`, 'error');
+        this.addLogEntry(` ${message.message}`, 'error');
     }
 
     sendMessage(message) {
@@ -226,8 +215,6 @@ class WordChainClient {
             this.showError('Chưa đến lượt bạn!');
             return;
         }
-
-        // Show loading state
         const btn = document.getElementById('submit-word-btn');
         const btnText = document.getElementById('btn-text');
         const btnLoading = document.getElementById('btn-loading');
@@ -235,14 +222,10 @@ class WordChainClient {
         btn.disabled = true;
         btnText.classList.add('hidden');
         btnLoading.classList.remove('hidden');
-
-        // Send word to server
         this.sendMessage({
             type: 'WORD',
             word: word
         });
-
-        // Reset button state after a delay (will be re-enabled when turn comes back)
         setTimeout(() => {
             btn.disabled = false;
             btnText.classList.remove('hidden');
@@ -258,8 +241,6 @@ class WordChainClient {
             input.style.boxShadow = 'none';
             return;
         }
-        
-        // Check chain rule
         if (this.gameState.usedWords.length > 0) {
             const lastWord = this.gameState.usedWords[this.gameState.usedWords.length - 1].word;
             const lastChar = lastWord.charAt(lastWord.length - 1).toLowerCase();
@@ -273,8 +254,6 @@ class WordChainClient {
                 input.style.boxShadow = '0 0 0 3px rgba(40, 167, 69, 0.1)';
             }
         }
-        
-        // Check if word was used
         if (this.gameState.usedWords.some(w => w.word.toLowerCase() === word.toLowerCase())) {
             input.style.borderColor = '#ffc107';
             input.style.boxShadow = '0 0 0 3px rgba(255, 193, 7, 0.1)';
@@ -288,11 +267,9 @@ class WordChainClient {
         
         input.disabled = false;
         btn.disabled = false;
-        title.textContent = '💭 Lượt của bạn - Nhập từ';
+        title.textContent = ' Lượt của bạn - Nhập từ';
         
         input.focus();
-        
-        // Show hint
         if (this.gameState.usedWords.length > 0) {
             const lastWord = this.gameState.usedWords[this.gameState.usedWords.length - 1].word;
             const lastChar = lastWord.charAt(lastWord.length - 1).toUpperCase();
@@ -310,11 +287,9 @@ class WordChainClient {
         input.disabled = true;
         btn.disabled = true;
         input.value = '';
-        title.textContent = '⏳ Chờ lượt của bạn';
+        title.textContent = ' Chờ lượt của bạn';
         
         document.getElementById('word-hint').classList.add('hidden');
-        
-        // Reset input styling
         input.style.borderColor = '#ddd';
         input.style.boxShadow = 'none';
     }
@@ -366,8 +341,6 @@ class WordChainClient {
                 ${wordData.word}
             </div>
         `).join('');
-        
-        // Auto scroll to latest word
         container.scrollLeft = container.scrollWidth;
     }
 
@@ -397,8 +370,6 @@ class WordChainClient {
         
         log.appendChild(entry);
         log.scrollTop = log.scrollHeight;
-        
-        // Keep only last 100 entries
         while (log.children.length > 100) {
             log.removeChild(log.firstChild);
         }
@@ -415,8 +386,6 @@ class WordChainClient {
         messageEl.textContent = message;
         toast.className = `toast ${type}`;
         toast.classList.remove('hidden');
-        
-        // Auto hide after 5 seconds
         setTimeout(() => {
             this.hideToast();
         }, 5000);
@@ -432,12 +401,8 @@ class WordChainClient {
         }
         
         this.connected = false;
-        
-        // Reset UI
         document.getElementById('connection-section').classList.remove('hidden');
         document.getElementById('game-section').classList.add('hidden');
-        
-        // Reset game state
         this.gameState = {
             players: [],
             usedWords: [],
@@ -451,21 +416,15 @@ class WordChainClient {
     clearLog() {
         document.getElementById('game-log').innerHTML = '';
     }
-
-    // Heartbeat to keep connection alive
     startHeartbeat() {
         setInterval(() => {
             if (this.connected) {
                 this.sendMessage({ type: 'PING' });
             }
-        }, 30000); // Every 30 seconds
+        }, 30000);
     }
 }
-
-// Global client instance
 const gameClient = new WordChainClient();
-
-// Global functions for HTML onclick events
 function connectToServer() {
     const host = document.getElementById('server-host').value.trim() || 'localhost';
     const port = parseInt(document.getElementById('server-port').value) || 8765;
@@ -499,8 +458,6 @@ function clearLog() {
 function hideToast() {
     gameClient.hideToast();
 }
-
-// Start heartbeat when page loads
 document.addEventListener('DOMContentLoaded', () => {
     gameClient.startHeartbeat();
 });
