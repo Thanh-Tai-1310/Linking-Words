@@ -14,8 +14,6 @@ class WordChainServer:
         self.used_words = []
         self.current_turn = 0
         self.game_started = False
-        
-        # Từ điển mẫu
         self.valid_words = {
             'apple', 'elephant', 'tiger', 'rabbit', 'tree', 'earth', 'house', 'egg',
             'game', 'moon', 'nice', 'easy', 'yellow', 'water', 'rice', 'eat',
@@ -58,8 +56,7 @@ class WordChainServer:
 
     async def handle_join(self, websocket, message):
         username = message.get('username', '').strip()
-        
-        # Validation
+
         if not username:
             await self.send_error(websocket, "Username cannot be empty")
             return
@@ -75,17 +72,12 @@ class WordChainServer:
         if len(self.clients) >= 5:
             await self.send_error(websocket, "Room is full (max 5 players)")
             return
-
-        # Add client
         self.clients[websocket] = {
             'username': username,
             'score': 0
         }
         self.player_list.append(username)
-        
         logger.info(f"Player {username} joined the game")
-        
-        # Send join success
         await self.send_message(websocket, {
             'type': 'JOIN_SUCCESS',
             'username': username,
@@ -94,11 +86,7 @@ class WordChainServer:
             'current_turn': self.current_turn,
             'game_started': self.game_started
         })
-        
-        # Broadcast game state
         await self.broadcast_game_state()
-        
-        # Start game if enough players
         if len(self.clients) >= 2 and not self.game_started:
             await self.start_game()
 
@@ -109,41 +97,27 @@ class WordChainServer:
             
         word = message.get('word', '').strip().lower()
         username = self.clients[websocket]['username']
-        
-        # Check turn
         if self.player_list[self.current_turn] != username:
             await self.send_error(websocket, "Not your turn")
             return
-        
-        # Validate word
         validation = self.validate_word(word)
         if not validation['valid']:
             await self.send_error(websocket, validation['reason'])
             return
-        
-        # Add word
         self.used_words.append({
             'word': word,
             'player': username,
             'timestamp': datetime.now().isoformat()
         })
-        
-        # Add score
         self.clients[websocket]['score'] += len(word)
         
         logger.info(f"Player {username} submitted word: {word}")
-        
-        # Next turn
         self.next_turn()
-        
-        # Send success response
         await self.send_message(websocket, {
             'type': 'WORD_ACCEPTED',
             'word': word,
             'score': len(word)
         })
-        
-        # Broadcast new state
         await self.broadcast_game_state()
 
     def validate_word(self, word):
@@ -155,12 +129,8 @@ class WordChainServer:
             
         if word not in self.valid_words:
             return {'valid': False, 'reason': 'Word not in dictionary'}
-        
-        # Check duplicates
         if any(w['word'] == word for w in self.used_words):
             return {'valid': False, 'reason': 'Word already used'}
-        
-        # Check chain rule
         if self.used_words:
             last_word = self.used_words[-1]['word']
             last_char = last_word[-1].lower()
@@ -217,8 +187,6 @@ class WordChainServer:
             except Exception as e:
                 logger.error(f"Error broadcasting to client: {e}")
                 disconnected_clients.append(websocket)
-        
-        # Remove disconnected clients
         for websocket in disconnected_clients:
             await self.remove_client(websocket)
 
@@ -240,8 +208,6 @@ class WordChainServer:
         if websocket in self.clients:
             username = self.clients[websocket]['username']
             logger.info(f"Player {username} left the game")
-            
-            # Remove from lists
             del self.clients[websocket]
             if username in self.player_list:
                 # Adjust current_turn if needed
@@ -253,14 +219,10 @@ class WordChainServer:
                         self.current_turn = 0
                 
                 self.player_list.remove(username)
-            
-            # Reset game if not enough players
             if len(self.clients) < 2:
                 self.game_started = False
                 self.current_turn = 0
                 logger.info("Game paused - not enough players")
-            
-            # Broadcast new state
             if self.clients:
                 await self.broadcast_game_state()
 
